@@ -1,7 +1,10 @@
 import { Database } from "bun:sqlite";
 import path from "path";
+import { mkdirSync } from "node:fs";
 
 const dbPath = path.join(process.cwd(), ".data", "links.db");
+
+mkdirSync(path.dirname(dbPath), { recursive: true });
 
 export const db = new Database(dbPath);
 
