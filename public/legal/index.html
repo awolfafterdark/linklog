@@ -897,54 +897,54 @@
       <label for="slug">Link slug:</label>
       <input type="text" placeholder="xxxxx" name="slug" maxlength="12" />
 
-      <cap-widget data-cap-api-endpoint="/cap/"></cap-widget>
+      <label id="challenge-question" for="challenge-answer">Loading verification…</label>
+      <input id="challenge-answer" inputmode="numeric" autocomplete="off" placeholder="Answer" />
+      <button type="button" id="challenge-refresh">New question</button>
       <button id="deletion-request">Request deletion</button>
     </main>
   </body>
   <script>
-    document
-      .querySelector("#deletion-request")
-      .addEventListener("click", async () => {
-        const token = document.querySelector("cap-widget").token;
-
-        if (!token)
-          return alert("Solve the CAPTCHA to send a deletion request");
-
-        const slug = document
-          .querySelector("input")
-          .value.trim()
-          .replaceAll("/");
-
-        document.querySelector("#deletion-request").disabled = true;
-        document.querySelector("#deletion-request").innerText = "Sending...";
-
-        document.querySelector("cap-widget").reset();
-
-        try {
-          const { result } = await (
-            await fetch("/api/deleteme", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                slug,
-                token
-              }),
-            })
-          ).json();
-
-          alert(result);
-        } catch (e) {
-          alert(e.message);
-        }
-
-        document.querySelector("#deletion-request").disabled = false;
-        document.querySelector("#deletion-request").innerText =
-          "Request deletion";
-      });
+    let challenge;
+    async function loadChallenge() {
+      try {
+        const response = await fetch("/cap/challenge", { cache: "no-store" });
+        if (!response.ok) throw new Error("Challenge unavailable");
+        challenge = await response.json();
+        document.querySelector("#challenge-question").textContent = challenge.question;
+        document.querySelector("#challenge-answer").value = "";
+      } catch (e) {
+        document.querySelector("#challenge-question").textContent = e.message;
+      }
+    }
+    document.querySelector("#challenge-refresh").addEventListener("click", loadChallenge);
+    document.querySelector("#deletion-request").addEventListener("click", async () => {
+      if (!challenge) return alert("Verification is unavailable");
+      const slug = document.querySelector('input[name="slug"]').value.trim().replaceAll("/", "");
+      const button = document.querySelector("#deletion-request");
+      button.disabled = true;
+      button.textContent = "Sending...";
+      try {
+        const response = await fetch("/api/deleteme", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug,
+            challengeToken: challenge.token,
+            challengeAnswer: document.querySelector("#challenge-answer").value
+          })
+        });
+        const data = await response.json();
+        alert(data.result || data.error || "Request submitted");
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = "Request deletion";
+        await loadChallenge();
+      }
+    });
+    loadChallenge();
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@cap.js/widget@0.1.15"></script>
   <script
     defer
     data-domain="linklog.tiagorangel.com"
