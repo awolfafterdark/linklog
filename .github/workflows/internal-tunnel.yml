@@ -59,7 +59,7 @@ jobs:
               cat /tmp/linklog/app.log
               exit 1
             fi
-            if curl -fsS -o /dev/null http://127.0.0.1:3000/; then break; fi
+            if curl -fsS -H "Host: ${URL#https://}" -o /dev/null http://127.0.0.1:3000/; then break; fi
             sleep 2
           done
           curl -fsS -o /dev/null http://127.0.0.1:3000/ || { cat /tmp/linklog/app.log; exit 1; }
@@ -69,6 +69,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Temporary testing instance; URL expires when this run stops." >> "$GITHUB_STEP_SUMMARY"
           echo "LINKLOG_URL=$URL"
+          curl -fsS -o /dev/null "$URL/" || { echo "Public tunnel health check failed" >&2; tail -50 /tmp/linklog/tunnel.log; exit 1; }
           deadline=$(( $(date +%s) + 6*60*60 - 5*60 ))
           while (( $(date +%s) < deadline )); do
             kill -0 "$APP_PID" 2>/dev/null || { echo "Application exited"; tail -80 /tmp/linklog/app.log; exit 1; }
