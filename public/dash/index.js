@@ -60,28 +60,39 @@ const utils = {
 
 const views = {
   async confirmShorten(url) {
-    const template = `
-      <div class="confirm-dialog">
-        <div class="confirm-content">
-          <h1>Create link?</h1>
-          <p>Solve the CAPTCHA to create a new short URL</p>
-
-          <div class="cap-container">
-            <cap-widget id="cap" data-cap-api-endpoint="/cap/"></cap-widget>
-          </div>
-        </div>
-      </div>
-    `;
-
-    $("main").innerHTML = template;
-
-    setTimeout(() => {
-      $(".cap-container cap-widget").addEventListener("solve", (e) => {
-        const { token } = e.detail;
-
-        this.createNewLink(url, token);
-      });
-    }, 100);
+    $("main").innerHTML = `
+      <div class="confirm-dialog"><div class="confirm-content">
+        <h1>Create trackable link</h1>
+        <p>Complete this quick verification to create a link.</p>
+        <form id="link-challenge">
+          <label for="challenge-answer" id="challenge-question">Loading challenge…</label>
+          <input id="challenge-answer" inputmode="numeric" autocomplete="off" required placeholder="Answer" />
+          <button type="submit">Create link</button>
+          <button type="button" id="challenge-refresh">New question</button>
+          <p id="challenge-error" role="alert"></p>
+        </form>
+      </div></div>`;
+    const form = $("#link-challenge");
+    let challenge;
+    const load = async () => {
+      try {
+        const response = await fetch("/cap/challenge", { cache: "no-store" });
+        if (!response.ok) throw new Error("Could not load challenge");
+        challenge = await response.json();
+        $("#challenge-question").textContent = challenge.question;
+        $("#challenge-answer").value = "";
+        $("#challenge-error").textContent = "";
+      } catch (error) {
+        $("#challenge-error").textContent = error.message;
+      }
+    };
+    $("#challenge-refresh").addEventListener("click", load);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!challenge) return;
+      await this.createNewLink(url, challenge.token, $("#challenge-answer").value);
+    });
+    await load();
   },
 
   async showEventDetails(hit, preloadedResponse, slug, scrollTop) {
@@ -1279,7 +1290,7 @@ const views = {
     );
   },
 
-  async createNewLink(url, captchaToken) {
+  async createNewLink(url, challengeToken, challengeAnswer) {
     $("main").innerHTML = `<div class="loader-wrap">
         <svg width="32" height="32" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><style>.spinner_ajPY{transform-origin:center;animation:spinner_AtaB .4s infinite linear;fill:white}@keyframes spinner_AtaB{100%{transform:rotate(360deg)}}</style><path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25" style="fill:white"/><path d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.7a8,8,0,0,1,6.66-6.61A1.42,1.42,0,0,0,12,2.69h0A1.57,1.57,0,0,0,10.14,1.16Z" class="spinner_ajPY"/></svg>
       </div>`;
@@ -1292,7 +1303,8 @@ const views = {
         },
         body: JSON.stringify({
           url: url,
-          cap: captchaToken,
+          challengeToken,
+          challengeAnswer,
         }),
       });
 
