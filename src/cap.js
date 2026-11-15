@@ -1,36 +1,33 @@
 import { Elysia } from "elysia";
-import Cap from "@cap.js/server";
-import { rateLimit } from "elysia-rate-limit";
+import { randomBytes, randomInt, createHmac, timingSafeEqual } from "node:crypto";
 
-const _cap = new Cap({
-  tokens_store_path: ".data/tokensList.json",
-});
+// First-party, single-use arithmetic challenge. No external CAPTCHA provider.
+const secret = randomBytes(32);
+const used = new Map();
+const lifetimeMs = 5 * 60 * 1000;
+const sign = (value) => createHmac("sha256", secret).update(value).digest("hex");
 
-export const cap = _cap;
+export function verifyChallenge(token, answer) {
+  if (typeof token !== "string" || typeof answer !== "string" || token.length > 300) return false;
+  const parts = token.split(".");
+  if (parts.length !== 4) return false;
+  const [nonce, sum, expires, mac] = parts;
+  if (!/^[a-f0-9]{32}$/.test(nonce) || !/^\d{1,3}$/.test(sum) || !/^\d{13}$/.test(expires) || !/^[a-f0-9]{64}$/.test(mac)) return false;
+  const expected = sign(nonce + "." + sum + "." + expires);
+  if (!timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return false;
+  const now = Date.now();
+  if (Number(expires) < now || Number(expires) > now + lifetimeMs || used.has(nonce)) return false;
+  if (answer.trim() !== sum) return false;
+  used.set(nonce, Number(expires));
+  for (const [id, expiry] of used) if (expiry < now) used.delete(id);
+  return true;
+}
 
-export const capRoutes = new Elysia({
-  prefix: "/cap",
-})
-  .use(
-    rateLimit({
-      duration: 1000,
-      max: 4,
-      scoping: "scoped",
-      generator: (request) =>
-        request.headers.get("cf-connecting-ip") || "0.0.0.0",
-    })
-  )
-  .post("/challenge", () => {
-    return _cap.createChallenge();
-  })
-
-  .post("/redeem", async ({ body, set }) => {
-    const { token, solutions } = body;
-
-    if (!token || !solutions) {
-      set.status = 400;
-      return { success: false };
-    }
-
-    return await _cap.redeemChallenge({ token, solutions });
+export const capRoutes = new Elysia({ prefix: "/cap" })
+  .get("/challenge", () => {
+    const a = randomInt(2, 15), b = randomInt(2, 15);
+    const nonce = randomBytes(16).toString("hex");
+    const sum = String(a + b), expires = String(Date.now() + lifetimeMs);
+    const payload = nonce + "." + sum + "." + expires;
+    return { question: "What is " + a + " + " + b + "?", token: payload + "." + sign(payload) };
   });
