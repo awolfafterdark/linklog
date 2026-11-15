@@ -1,33 +1,45 @@
 import { Elysia } from "elysia";
 import { randomBytes, randomInt, createHmac, timingSafeEqual } from "node:crypto";
 
-// First-party, single-use arithmetic challenge. No external CAPTCHA provider.
+// Server-side first-party challenge: the answer is never included in the token.
 const secret = randomBytes(32);
-const used = new Map();
+const challenges = new Map();
 const lifetimeMs = 5 * 60 * 1000;
+const maxChallenges = 10000;
 const sign = (value) => createHmac("sha256", secret).update(value).digest("hex");
+const purge = () => {
+  const now = Date.now();
+  for (const [nonce, challenge] of challenges) {
+    if (challenge.expires <= now) challenges.delete(nonce);
+  }
+};
 
 export function verifyChallenge(token, answer) {
-  if (typeof token !== "string" || typeof answer !== "string" || token.length > 300) return false;
+  if (typeof token !== "string" || typeof answer !== "string" || token.length > 150) return false;
   const parts = token.split(".");
-  if (parts.length !== 4) return false;
-  const [nonce, sum, expires, mac] = parts;
-  if (!/^[a-f0-9]{32}$/.test(nonce) || !/^\d{1,3}$/.test(sum) || !/^\d{13}$/.test(expires) || !/^[a-f0-9]{64}$/.test(mac)) return false;
-  const expected = sign(nonce + "." + sum + "." + expires);
+  if (parts.length !== 3) return false;
+  const [nonce, expires, mac] = parts;
+  if (!/^[a-f0-9]{32}$/.test(nonce) || !/^\d{13}$/.test(expires) || !/^[a-f0-9]{64}$/.test(mac)) return false;
+  const expected = sign(nonce + "." + expires);
   if (!timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return false;
-  const now = Date.now();
-  if (Number(expires) < now || Number(expires) > now + lifetimeMs || used.has(nonce)) return false;
-  if (answer.trim() !== sum) return false;
-  used.set(nonce, Number(expires));
-  for (const [id, expiry] of used) if (expiry < now) used.delete(id);
-  return true;
+  const challenge = challenges.get(nonce);
+  if (!challenge || challenge.expires !== Number(expires)) return false;
+  // Consume the challenge even if the answer is wrong.
+  challenges.delete(nonce);
+  if (challenge.expires <= Date.now()) return false;
+  return answer.trim() === challenge.answer;
 }
 
 export const capRoutes = new Elysia({ prefix: "/cap" })
   .get("/challenge", () => {
+    purge();
+    if (challenges.size >= maxChallenges) {
+      return { error: "Too many pending challenges. Try again shortly." };
+    }
     const a = randomInt(2, 15), b = randomInt(2, 15);
     const nonce = randomBytes(16).toString("hex");
-    const sum = String(a + b), expires = String(Date.now() + lifetimeMs);
-    const payload = nonce + "." + sum + "." + expires;
+    const expires = Date.now() + lifetimeMs;
+    challenges.set(nonce, { answer: String(a + b), expires });
+    const payload = nonce + "." + expires;
     return { question: "What is " + a + " + " + b + "?", token: payload + "." + sign(payload) };
   });
