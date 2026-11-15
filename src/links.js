@@ -49,7 +49,7 @@ export const getLink = async ({ slug, key }) => {
     throw new Error("Link not found");
   }
 
-  const isValidKey = await Bun.password.verify(key, record.key_hash);
+  const isValidKey = typeof key === "string" && await Bun.password.verify(key, record.key_hash);
   if (!isValidKey) {
     throw new Error("Invalid key");
   }
@@ -119,7 +119,11 @@ export const deleteMe = async ({ slug, ip }) => {
   }
 
   const hit = hits.find((hit) => {
-    return JSON.parse(hit.ip_data).ip.ip === ip;
+    try {
+      return JSON.parse(hit.ip_data)?.ip?.ip === ip && typeof ip === "string" && ip.length > 0;
+    } catch {
+      return false;
+    }
   });
 
   if (!hit?.id) {
