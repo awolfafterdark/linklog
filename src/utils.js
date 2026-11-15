@@ -1,8 +1,10 @@
+import { randomInt } from "node:crypto";
+
 export const generateString = (length) => {
   const characters = "abcdefghijklmnopqrstuvwxyz1234567890";
   let result = "";
   for (let i = 0; i < length; i++) {
-    result += characters[Math.floor(Math.random() * characters.length)];
+    result += characters[randomInt(characters.length)];
   }
   return result;
 };
@@ -15,10 +17,16 @@ export const generateUniqueId = (checkFunction) => {
   return id;
 };
 
-export const validateUrl = (url) => {
-  const urlPattern =
-    /^(https?|mailto):\/\/[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[1][2][3][4][5][6]{1,5})?(\/.*)?$/gm;
-  return urlPattern.test(url.toLowerCase());
+export const validateUrl = (value) => {
+  if (typeof value !== "string" || value.length > 1000) return false;
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
+    if (!parsed.hostname || parsed.username || parsed.password) return false;
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const tryAsync = async (fn) => {
