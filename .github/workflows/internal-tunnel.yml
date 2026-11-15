@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p /tmp/linklog
+          mkdir -p /tmp/linklog .data
           cleanup() {
             kill "${APP_PID:-}" "${TUNNEL_PID:-}" 2>/dev/null || true
             wait "${APP_PID:-}" "${TUNNEL_PID:-}" 2>/dev/null || true
