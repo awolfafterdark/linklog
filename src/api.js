@@ -7,7 +7,7 @@ import {
   deleteMe,
 } from "./links.js";
 import { rateLimit } from "elysia-rate-limit";
-import { cap } from "./cap.js";
+import { verifyChallenge } from "./cap.js";
 
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .use(
@@ -21,9 +21,9 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   )
 
   .post("/create", async ({ body, request }) => {
-    const { url, cap: captchaToken } = body;
+    const { url, challengeToken, challengeAnswer } = body;
 
-    const { success } = await cap.validateToken(captchaToken);
+    const success = verifyChallenge(challengeToken, challengeAnswer);
 
     if (!success) {
       return { error: "CAPTCHA validation failed" };
@@ -63,8 +63,8 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
   })
 
   .post("/deleteme", async ({ body, headers }) => {
-    const { slug, token } = body;
-    const { success } = await cap.validateToken(token);
+    const { slug, challengeToken, challengeAnswer } = body;
+    const success = verifyChallenge(challengeToken, challengeAnswer);
 
     if (!success) {
       return { error: "CAPTCHA validation failed" };
