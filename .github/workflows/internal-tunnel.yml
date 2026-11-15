@@ -52,9 +52,7 @@ jobs:
             echo "Cloudflare tunnel URL not discovered" >&2
             exit 1
           fi
-          export CF-HOST="${URL#https://}"
-          export PORT=3000
-          bun run start > /tmp/linklog/app.log 2>&1 &
+          env "CF-HOST=${URL#https://}" PORT=3000 bun run start > /tmp/linklog/app.log 2>&1 &
           APP_PID=$!
           for i in $(seq 1 45); do
             if ! kill -0 "$APP_PID" 2>/dev/null; then
